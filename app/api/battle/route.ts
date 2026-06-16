@@ -28,7 +28,9 @@ export async function POST(request: Request) {
       const enemyCards = opponentCardIds?.length
         ? await prisma.card.findMany({ where: { id: { in: opponentCardIds } } })
         : await Promise.all(
-            orderedPlayerCards.map(() => createMonsterCard(enemyPrompts[Math.floor(Math.random() * enemyPrompts.length)])),
+            orderedPlayerCards.map(() =>
+              createMonsterCard(enemyPrompts[Math.floor(Math.random() * enemyPrompts.length)], { useAi: false }),
+            ),
           )
       const orderedEnemyCards = opponentCardIds?.length
         ? opponentCardIds
@@ -127,7 +129,7 @@ export async function POST(request: Request) {
 
     const enemyCard = opponentCardId
       ? await prisma.card.findUnique({ where: { id: opponentCardId } })
-      : await createMonsterCard(enemyPrompts[Math.floor(Math.random() * enemyPrompts.length)])
+      : await createMonsterCard(enemyPrompts[Math.floor(Math.random() * enemyPrompts.length)], { useAi: false })
 
     if (!enemyCard) {
       return NextResponse.json({ error: "Opponent card not found" }, { status: 404 })

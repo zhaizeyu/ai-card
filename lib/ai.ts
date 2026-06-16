@@ -34,8 +34,9 @@ export async function generateCardCopy(input: {
   rarity: Rarity
   element: Element
   skill: SkillRule
+  forceFallback?: boolean
 }): Promise<{ copy: AiCardConcept; skillProposal: SkillProposal; rawOutput: string; source: "ai" | "fallback" }> {
-  if (!process.env.OPENAI_API_KEY) {
+  if (input.forceFallback || !process.env.OPENAI_API_KEY) {
     const copy = fallbackCardCopy(input)
     return { copy, skillProposal: {}, rawOutput: JSON.stringify(copy), source: "fallback" }
   }

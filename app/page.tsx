@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button"
 import { prisma } from "@/lib/db"
 import { MonsterCard } from "@/components/cards/MonsterCard"
 
+export const dynamic = "force-dynamic"
+
 export default async function HomePage() {
   const latestCards = await prisma.card.findMany({ orderBy: { createdAt: "desc" }, take: 3 })
 
@@ -29,6 +31,9 @@ export default async function HomePage() {
               </Button>
               <Link className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/gallery">
                 查看图鉴
+              </Link>
+              <Link className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/world">
+                进入小世界
               </Link>
             </div>
           </div>

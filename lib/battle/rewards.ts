@@ -30,7 +30,7 @@ export function buildBattleReward(winner: Card, result: "win" | "loss" | "draw")
           name: rewardNames[winner.effect as keyof typeof rewardNames] ?? "野性组件",
           type: "skill_component",
           rarity: winner.rarity,
-          description: "可在后续版本用于改造卡牌技能组件。",
+          description: "可在小世界背包装配到 Lv.7 卡牌的强化槽。",
           effect: winner.effect,
           cost: Math.max(1, winner.effectPower),
         }

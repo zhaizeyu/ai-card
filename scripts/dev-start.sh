@@ -5,6 +5,7 @@ PORT="${PORT:-3002}"
 HOST="${HOST:-0.0.0.0}"
 PID_FILE="${PID_FILE:-.dev/dev-server.pid}"
 LOG_FILE="${LOG_FILE:-.dev/dev-server.log}"
+DEV_DIST_DIR="${NEXT_DIST_DIR:-.next-dev}"
 
 mkdir -p "$(dirname "$PID_FILE")" "$(dirname "$LOG_FILE")"
 
@@ -23,10 +24,11 @@ if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | gre
 fi
 
 echo "Starting dev server on http://$HOST:$PORT"
+rm -rf "$DEV_DIST_DIR"
 if command -v setsid >/dev/null 2>&1; then
-  setsid ./node_modules/.bin/next dev -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 < /dev/null &
+  NEXT_DIST_DIR="$DEV_DIST_DIR" setsid ./node_modules/.bin/next dev -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 < /dev/null &
 else
-  nohup ./node_modules/.bin/next dev -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 &
+  NEXT_DIST_DIR="$DEV_DIST_DIR" nohup ./node_modules/.bin/next dev -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 &
 fi
 PID="$!"
 echo "$PID" >"$PID_FILE"

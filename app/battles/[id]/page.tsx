@@ -28,6 +28,8 @@ export default async function BattleResultPage({ params }: { params: Promise<{ i
         level?: number
         unlocked?: string[]
         title?: string | null
+        bondGained?: number
+        teamBond?: Array<{ cardId: string; bond: number }>
         team?: Array<{
           cardId: string
           exp: number
@@ -87,6 +89,14 @@ export default async function BattleResultPage({ params }: { params: Promise<{ i
             {reward?.levelsGained ? <p>升级：Lv.{reward.level}</p> : null}
             {reward?.unlocked?.length ? <p>解锁：{reward.unlocked.join("、")}</p> : null}
             {reward?.title ? <p>称号：{reward.title}</p> : null}
+            {reward?.bondGained ? <p>队伍羁绊 +{reward.bondGained}</p> : null}
+            {reward?.teamBond?.length ? (
+              <div className="space-y-1">
+                {reward.teamBond.map((item) => (
+                  <p key={item.cardId}>参战羁绊达到 {item.bond}</p>
+                ))}
+              </div>
+            ) : null}
             <p>组件：{reward?.component?.name ?? "未掉落"}</p>
           </div>
         </aside>

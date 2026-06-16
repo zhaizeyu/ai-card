@@ -8,7 +8,7 @@ import { rollElement } from "./element"
 import { rollRarity } from "./rarity"
 import { generateSkill } from "./skill-generator"
 
-export async function createMonsterCard(prompt: string) {
+export async function createMonsterCard(prompt: string, options: { useAi?: boolean } = {}) {
   const { prompt: safePrompt } = promptSchema.parse({ prompt })
   const rarity = rollRarity()
   const element = rollElement()
@@ -21,6 +21,7 @@ export async function createMonsterCard(prompt: string) {
       rarity,
       element,
       skill: fallbackSkill,
+      forceFallback: options.useAi === false,
     })
     const skill = source === "fallback" ? fallbackSkill : generateSkill(rarity, safePrompt, skillProposal)
     const growthType = rollGrowthType(safePrompt, skill.effect)

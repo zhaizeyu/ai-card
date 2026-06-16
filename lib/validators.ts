@@ -36,3 +36,33 @@ export const cardListQuerySchema = z.object({
   rarity: z.string().optional(),
   element: z.string().optional(),
 })
+
+export const worldActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("create"),
+  }),
+  z.object({
+    action: z.literal("assign_team"),
+    worldId: z.string().min(1),
+    role: z.enum(["team_1", "team_2", "team_3"]),
+    cardId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("advance_day"),
+    worldId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("train_bond"),
+    worldId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("resolve_event"),
+    eventId: z.string().min(1),
+    approach: z.enum(["fight", "caution", "negotiate"]),
+  }),
+  z.object({
+    action: z.literal("equip_component"),
+    componentId: z.string().min(1),
+    cardId: z.string().min(1),
+  }),
+])
