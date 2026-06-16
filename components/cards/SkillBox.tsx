@@ -1,4 +1,5 @@
 import type { Card } from "@prisma/client"
+import { getComponentById } from "@/lib/card/components"
 
 const effectLabels: Record<string, string> = {
   damage: "直伤",
@@ -40,8 +41,11 @@ const conditionLabels: Record<string, string> = {
 }
 
 export function SkillBox({ card }: { card: Card }) {
+  const passive = getComponentById(card.passiveComponent)
+  const upgrade = getComponentById(card.upgradeComponent)
+
   return (
-    <div className="rounded-md border border-ink/10 bg-ink/[0.03] p-3">
+    <div className="space-y-3 rounded-md border border-ink/10 bg-ink/[0.03] p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">{card.skillName}</h3>
@@ -57,6 +61,28 @@ export function SkillBox({ card }: { card: Card }) {
         <span>目标 {card.selector}</span>
         <span>强度 {card.effectPower}</span>
       </div>
+      <div className="grid gap-2 text-xs text-ink/65 md:grid-cols-2">
+        <ComponentLine label="被动" componentName={passive?.name} unlocked={card.passiveUnlocked} lockedText="Lv.5 解锁" />
+        <ComponentLine label="强化" componentName={upgrade?.name} unlocked={card.upgradeUnlocked} lockedText="Lv.7 解锁" />
+      </div>
     </div>
+  )
+}
+
+function ComponentLine({
+  label,
+  componentName,
+  unlocked,
+  lockedText,
+}: {
+  label: string
+  componentName?: string
+  unlocked: boolean
+  lockedText: string
+}) {
+  return (
+    <span className="rounded bg-white px-2 py-1">
+      {label} {componentName ?? "未配置"} · {unlocked ? "已启用" : lockedText}
+    </span>
   )
 }

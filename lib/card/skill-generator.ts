@@ -39,6 +39,8 @@ export type SkillRule = {
   cooldown: number
 }
 
+export type SkillProposal = Partial<Pick<SkillRule, "trigger" | "condition" | "selector" | "effect">>
+
 export const effectCost: Record<Effect, number> = {
   damage: 2,
   burn: 3,
@@ -66,7 +68,7 @@ export const raritySkillBudget: Record<Rarity, number> = {
   legendary: 10,
 }
 
-const effects: Effect[] = [
+export const effectOptions = [
   "damage",
   "burn",
   "armor_break",
@@ -84,22 +86,34 @@ const effects: Effect[] = [
   "focus",
   "mark",
   "cleanse",
-]
+] as const satisfies readonly Effect[]
+export const triggerOptions = ["battle_start", "on_attack", "on_hit", "turn_start", "low_hp", "on_kill"] as const satisfies readonly Trigger[]
+export const conditionOptions = [
+  "none",
+  "enemy_burning",
+  "enemy_statused",
+  "enemy_low_hp",
+  "self_low_hp",
+  "enemy_high_def",
+  "self_faster",
+] as const satisfies readonly Condition[]
+export const selectorOptions = ["enemy_single", "self", "lowest_hp_enemy", "random_enemy"] as const satisfies readonly Selector[]
 const fallbackTriggers: Trigger[] = ["on_attack", "on_hit", "turn_start", "battle_start"]
 
-export function generateSkill(rarity: Rarity, prompt = ""): SkillRule {
+export function generateSkill(rarity: Rarity, prompt = "", proposal: SkillProposal = {}): SkillRule {
   const budget = raritySkillBudget[rarity]
-  const availableEffects = effects.filter((effect) => effectCost[effect] <= budget)
-  const effect = pickEffect(availableEffects, prompt)
+  const availableEffects = effectOptions.filter((effect) => effectCost[effect] <= budget)
+  const proposedEffect = normalizeOption(proposal.effect, effectOptions)
+  const effect = proposedEffect && availableEffects.includes(proposedEffect) ? proposedEffect : pickEffect(availableEffects, prompt)
   const remaining = budget - effectCost[effect]
-  const trigger = pickTrigger(effect, prompt)
-  const condition = pickCondition(trigger, effect, prompt)
+  const trigger = normalizeTrigger(proposal.trigger, effect) ?? pickTrigger(effect, prompt)
+  const condition = normalizeCondition(proposal.condition, trigger, effect, prompt) ?? pickCondition(trigger, effect, prompt)
 
   return {
     skillType: effect,
     trigger,
     condition,
-    selector: pickSelector(effect),
+    selector: normalizeSelector(proposal.selector, effect) ?? pickSelector(effect),
     effect,
     effectPower: Math.max(1, Math.min(5, 1 + remaining)),
     cooldown: effectCost[effect] >= 5 ? 2 : effectCost[effect] >= 4 ? 1 : 0,
@@ -197,6 +211,40 @@ function pickSelector(effect: Effect): Selector {
   if (effect === "execute") return "lowest_hp_enemy"
   if (effect === "chain" || effect === "stun") return weightedPick([{ effect: "enemy_single", weight: 2 }, { effect: "random_enemy", weight: 1 }])
   return "enemy_single"
+}
+
+function normalizeTrigger(value: unknown, effect: Effect): Trigger | undefined {
+  const trigger = normalizeOption(value, triggerOptions)
+  if (!trigger) return undefined
+  if ((effect === "heal" || effect === "regen" || effect === "cleanse") && trigger === "on_attack") return undefined
+  if (effect === "execute" && trigger !== "on_attack") return undefined
+  if ((effect === "shield" || effect === "counter") && trigger === "on_attack") return undefined
+  return trigger
+}
+
+function normalizeCondition(value: unknown, trigger: Trigger, effect: Effect, prompt: string): Condition | undefined {
+  const condition = normalizeOption(value, conditionOptions)
+  if (!condition) return undefined
+  if (trigger === "battle_start" || prompt.includes("开局")) return "none"
+  if (trigger === "low_hp") return "self_low_hp"
+  if (effect === "execute") return "enemy_low_hp"
+  if (effect === "mark") return condition === "self_low_hp" ? "none" : condition
+  if (condition === "enemy_burning" && effect !== "damage" && effect !== "pierce") return undefined
+  return condition
+}
+
+function normalizeSelector(value: unknown, effect: Effect): Selector | undefined {
+  const selector = normalizeOption(value, selectorOptions)
+  if (!selector) return undefined
+  if (selfEffects.has(effect)) return "self"
+  if (selector === "self") return undefined
+  if (effect === "execute") return selector === "lowest_hp_enemy" ? selector : undefined
+  return selector
+}
+
+function normalizeOption<T extends string>(value: unknown, options: readonly T[]): T | undefined {
+  if (typeof value !== "string") return undefined
+  return options.includes(value as T) ? (value as T) : undefined
 }
 
 function weightedPick<T>(options: Array<{ effect: T; weight: number }>): T {

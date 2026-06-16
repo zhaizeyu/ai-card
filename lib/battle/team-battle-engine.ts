@@ -9,8 +9,11 @@ import {
 import { calculateDamage } from "./damage"
 import { addStatus, getStatus, removeStatus, tickStatuses, type FighterStatus } from "./status-effects"
 
-type Fighter = {
-  side: "player" | "enemy"
+type Side = "player" | "enemy"
+
+type TeamFighter = {
+  side: Side
+  position: number
   card: Card
   hp: number
   maxHp: number
@@ -19,75 +22,99 @@ type Fighter = {
   skipped: boolean
 }
 
-export type BattleOutcome = {
+type TeamSnapshot = {
+  cardId: string
+  name: string
+  position: number
+  hp: number
+  maxHp: number
+  alive: boolean
+}
+
+export type TeamBattleOutcome = {
   result: "win" | "loss" | "draw"
   winnerCardId?: string
   loserCardId?: string
   log: string[]
-  finalHp: {
-    player: number
-    enemy: number
-  }
+  playerTeam: TeamSnapshot[]
+  enemyTeam: TeamSnapshot[]
 }
 
-export function runBattle(playerCard: Card, enemyCard: Card): BattleOutcome {
-  const player = makeFighter("player", playerCard)
-  const enemy = makeFighter("enemy", enemyCard)
+export function runTeamBattle(playerCards: Card[], enemyCards: Card[]): TeamBattleOutcome {
+  const playerTeam = playerCards.slice(0, 3).map((card, index) => makeFighter("player", card, index))
+  const enemyTeam = enemyCards.slice(0, 3).map((card, index) => makeFighter("enemy", card, index))
   const log: string[] = []
 
-  applyBattleStartPassive(player, log)
-  applyBattleStartPassive(enemy, log)
-  processBattleStart(player, enemy, log)
-  processBattleStart(enemy, player, log)
+  log.push(`小队战斗开始：${formatTeam(playerTeam)} 对阵 ${formatTeam(enemyTeam)}。`)
+  for (const fighter of [...playerTeam, ...enemyTeam]) {
+    applyBattleStartPassive(fighter, log)
+  }
+  for (const fighter of [...playerTeam, ...enemyTeam]) {
+    const target = selectTarget(fighter, getEnemies(fighter, playerTeam, enemyTeam))
+    if (target) processBattleStart(fighter, target, log)
+  }
 
-  for (let round = 1; round <= 10; round += 1) {
+  for (let round = 1; round <= 12; round += 1) {
     log.push(`第 ${round} 回合开始。`)
-    processTurnStart(player, enemy, log)
-    processTurnStart(enemy, player, log)
 
-    if (isDefeated(player) || isDefeated(enemy)) break
-
-    const order = getActionOrder(player, enemy)
-    for (const actor of order) {
-      const target = actor.side === "player" ? enemy : player
-      if (isDefeated(actor) || isDefeated(target)) continue
-      act(actor, target, log)
-      if (isDefeated(target)) {
-        log.push(`${actor.card.name} 击败了 ${target.card.name}。`)
-        break
-      }
+    for (const fighter of getLivingFighters([...playerTeam, ...enemyTeam])) {
+      const target = selectTarget(fighter, getEnemies(fighter, playerTeam, enemyTeam))
+      processTurnStart(fighter, target, log)
     }
 
-    player.statuses = tickStatuses(player.statuses)
-    enemy.statuses = tickStatuses(enemy.statuses)
-    player.cooldown = Math.max(0, player.cooldown - 1)
-    enemy.cooldown = Math.max(0, enemy.cooldown - 1)
+    if (isTeamDefeated(playerTeam) || isTeamDefeated(enemyTeam)) break
 
-    if (isDefeated(player) || isDefeated(enemy)) break
+    const order = getLivingFighters([...playerTeam, ...enemyTeam]).sort((a, b) => {
+      const speedDiff = currentSpeed(b) - currentSpeed(a)
+      if (speedDiff !== 0) return speedDiff
+      const positionDiff = a.position - b.position
+      if (positionDiff !== 0) return positionDiff
+      return a.side === "player" ? -1 : 1
+    })
+
+    for (const actor of order) {
+      if (isDefeated(actor)) continue
+      const enemies = getEnemies(actor, playerTeam, enemyTeam)
+      const target = selectTarget(actor, enemies)
+      if (!target) break
+
+      act(actor, target, playerTeam, enemyTeam, log)
+      if (isDefeated(target)) log.push(`${actor.card.name} 击败了 ${target.card.name}。`)
+      if (isTeamDefeated(playerTeam) || isTeamDefeated(enemyTeam)) break
+    }
+
+    for (const fighter of [...playerTeam, ...enemyTeam]) {
+      fighter.statuses = tickStatuses(fighter.statuses)
+      fighter.cooldown = Math.max(0, fighter.cooldown - 1)
+    }
+
+    if (isTeamDefeated(playerTeam) || isTeamDefeated(enemyTeam)) break
   }
 
-  const result = resolveResult(player, enemy)
+  const result = resolveTeamResult(playerTeam, enemyTeam)
   if (result === "draw") {
-    log.push("十回合后双方仍未倒下，战斗以平局结束。")
-    return { result, log, finalHp: { player: Math.max(0, player.hp), enemy: Math.max(0, enemy.hp) } }
+    log.push("双方未能彻底击溃对手，战斗以平局结束。")
+  } else {
+    log.push(`战斗结束：${result === "win" ? "玩家小队" : "敌方小队"} 获胜。`)
   }
 
-  const winner = result === "win" ? player : enemy
-  const loser = result === "win" ? enemy : player
-  log.push(`战斗结束：${winner.card.name} 获胜。`)
+  const winner = getLivingFighters(result === "win" ? playerTeam : result === "loss" ? enemyTeam : []).at(0)
+  const loser = getDefeatedFighters(result === "win" ? enemyTeam : result === "loss" ? playerTeam : []).at(0)
 
   return {
     result,
-    winnerCardId: winner.card.id,
-    loserCardId: loser.card.id,
+    winnerCardId: winner?.card.id,
+    loserCardId: loser?.card.id,
     log,
-    finalHp: { player: Math.max(0, player.hp), enemy: Math.max(0, enemy.hp) },
+    playerTeam: snapshotTeam(playerTeam),
+    enemyTeam: snapshotTeam(enemyTeam),
   }
 }
 
-function makeFighter(side: Fighter["side"], card: Card): Fighter {
+function makeFighter(side: Side, card: Card, position: number): TeamFighter {
   return {
     side,
+    position,
     card,
     hp: card.hp,
     maxHp: card.hp,
@@ -97,7 +124,15 @@ function makeFighter(side: Fighter["side"], card: Card): Fighter {
   }
 }
 
-function processTurnStart(fighter: Fighter, target: Fighter, log: string[]) {
+function processBattleStart(fighter: TeamFighter, target: TeamFighter, log: string[]) {
+  if (fighter.card.trigger !== "battle_start" || isDefeated(fighter)) return
+  log.push(`${fighter.card.name} 抢先发动开局技能。`)
+  executeSkill(fighter, target, log)
+}
+
+function processTurnStart(fighter: TeamFighter, target: TeamFighter | undefined, log: string[]) {
+  if (isDefeated(fighter)) return
+
   const burn = getStatus(fighter.statuses, "burn")
   if (burn) {
     const damage = Math.min(fighter.hp, 2 + Math.floor(Math.random() * 3) + Math.max(0, burn.power - 1))
@@ -121,12 +156,12 @@ function processTurnStart(fighter: Fighter, target: Fighter, log: string[]) {
 
   applyTurnStartPassive(fighter, log)
 
-  if (fighter.card.trigger === "turn_start" && shouldTrigger(fighter, target, "turn_start")) {
+  if (target && fighter.card.trigger === "turn_start" && shouldTrigger(fighter, target, "turn_start")) {
     executeSkill(fighter, target, log)
   }
 }
 
-function act(actor: Fighter, target: Fighter, log: string[]) {
+function act(actor: TeamFighter, defaultTarget: TeamFighter, playerTeam: TeamFighter[], enemyTeam: TeamFighter[], log: string[]) {
   const stun = getStatus(actor.statuses, "stun")
   if (stun && !actor.skipped) {
     actor.skipped = true
@@ -136,6 +171,7 @@ function act(actor: Fighter, target: Fighter, log: string[]) {
   }
 
   actor.skipped = false
+  const target = selectTarget(actor, getEnemies(actor, playerTeam, enemyTeam)) ?? defaultTarget
 
   if (actor.card.trigger !== "turn_start" && actor.cooldown === 0 && shouldTrigger(actor, target, actor.card.trigger)) {
     executeSkill(actor, target, log)
@@ -147,47 +183,17 @@ function act(actor: Fighter, target: Fighter, log: string[]) {
   log.push(`${actor.card.name} 普通攻击 ${target.card.name}，造成 ${damage} 点伤害。`)
 }
 
-function shouldTrigger(actor: Fighter, target: Fighter, trigger: string): boolean {
+function shouldTrigger(actor: TeamFighter, target: TeamFighter, trigger: string): boolean {
   if (trigger === "battle_start") return false
   if (trigger === "on_attack") return checkCondition(actor, target)
   if (trigger === "turn_start") return checkCondition(actor, target)
   if (trigger === "low_hp") return actor.hp / actor.maxHp <= 0.5 && checkCondition(actor, target)
   if (trigger === "on_hit") return actor.hp / actor.maxHp <= 0.7 && checkCondition(actor, target)
+  if (trigger === "on_kill") return false
   return false
 }
 
-function processBattleStart(fighter: Fighter, target: Fighter, log: string[]) {
-  if (fighter.card.trigger !== "battle_start") return
-
-  log.push(`${fighter.card.name} 抢先发动开局技能。`)
-  executeSkill(fighter, target, log)
-}
-
-function applyBattleStartPassive(fighter: Fighter, log: string[]) {
-  if (!isPassiveEnabled(fighter.card)) return
-
-  if (fighter.card.passiveComponent === "battle_instinct") {
-    fighter.statuses = addStatus(fighter.statuses, { name: "focus", turns: 2, power: 1 })
-    log.push(`${fighter.card.name} 的被动【战斗本能】发动，进入蓄势。`)
-  } else if (fighter.card.passiveComponent === "quick_feet") {
-    fighter.statuses = addStatus(fighter.statuses, { name: "speed_up", turns: 2, power: 2 })
-    log.push(`${fighter.card.name} 的被动【轻足步法】发动，速度提升。`)
-  }
-}
-
-function applyTurnStartPassive(fighter: Fighter, log: string[]) {
-  if (!isPassiveEnabled(fighter.card) || fighter.hp <= 0 || fighter.hp / fighter.maxHp > 0.5) return
-
-  if (fighter.card.passiveComponent === "emergency_barrier") {
-    fighter.statuses = addStatus(fighter.statuses, { name: "shield", turns: 1, power: 4 })
-    log.push(`${fighter.card.name} 的被动【临界屏障】发动，获得护盾。`)
-  } else if (fighter.card.passiveComponent === "self_repair") {
-    fighter.statuses = addStatus(fighter.statuses, { name: "regen", turns: 2, power: 1 })
-    log.push(`${fighter.card.name} 的被动【自我修复】发动，获得再生。`)
-  }
-}
-
-function checkCondition(actor: Fighter, target: Fighter): boolean {
+function checkCondition(actor: TeamFighter, target: TeamFighter): boolean {
   const condition = actor.card.condition
   if (condition === "none") return true
   if (condition === "enemy_burning") return Boolean(getStatus(target.statuses, "burn"))
@@ -199,7 +205,31 @@ function checkCondition(actor: Fighter, target: Fighter): boolean {
   return true
 }
 
-function executeSkill(actor: Fighter, target: Fighter, log: string[]) {
+function applyBattleStartPassive(fighter: TeamFighter, log: string[]) {
+  if (!isPassiveEnabled(fighter.card)) return
+
+  if (fighter.card.passiveComponent === "battle_instinct") {
+    fighter.statuses = addStatus(fighter.statuses, { name: "focus", turns: 2, power: 1 })
+    log.push(`${fighter.card.name} 的被动【战斗本能】发动，进入蓄势。`)
+  } else if (fighter.card.passiveComponent === "quick_feet") {
+    fighter.statuses = addStatus(fighter.statuses, { name: "speed_up", turns: 2, power: 2 })
+    log.push(`${fighter.card.name} 的被动【轻足步法】发动，速度提升。`)
+  }
+}
+
+function applyTurnStartPassive(fighter: TeamFighter, log: string[]) {
+  if (!isPassiveEnabled(fighter.card) || fighter.hp <= 0 || fighter.hp / fighter.maxHp > 0.5) return
+
+  if (fighter.card.passiveComponent === "emergency_barrier") {
+    fighter.statuses = addStatus(fighter.statuses, { name: "shield", turns: 1, power: 4 })
+    log.push(`${fighter.card.name} 的被动【临界屏障】发动，获得护盾。`)
+  } else if (fighter.card.passiveComponent === "self_repair") {
+    fighter.statuses = addStatus(fighter.statuses, { name: "regen", turns: 2, power: 1 })
+    log.push(`${fighter.card.name} 的被动【自我修复】发动，获得再生。`)
+  }
+}
+
+function executeSkill(actor: TeamFighter, target: TeamFighter, log: string[]) {
   const effect = actor.card.effect
   const power = getEffectivePower(actor.card)
   const durationBonus = getStatusDurationBonus(actor.card)
@@ -299,15 +329,15 @@ function executeSkill(actor: Fighter, target: Fighter, log: string[]) {
 }
 
 function applyDamage(
-  target: Fighter,
+  target: TeamFighter,
   amount: number,
   log: string[],
-  attacker?: Fighter,
+  attacker?: TeamFighter,
   options: { bypassShield?: boolean } = {},
 ): number {
   const mark = getStatus(target.statuses, "mark")
   const focus = attacker ? getStatus(attacker.statuses, "focus") : undefined
-  let finalAmount = amount + (mark ? mark.power : 0) + (focus ? focus.power * 2 : 0)
+  let finalAmount = Math.min(target.hp, amount + (mark ? mark.power : 0) + (focus ? focus.power * 2 : 0))
 
   if (focus && attacker) {
     attacker.statuses = removeStatus(attacker.statuses, "focus")
@@ -318,11 +348,11 @@ function applyDamage(
   if (shield && !options.bypassShield) {
     const absorbed = Math.min(shield.power, finalAmount)
     shield.power -= absorbed
-    const remaining = finalAmount - absorbed
-    target.hp -= remaining
+    finalAmount -= absorbed
+    target.hp -= finalAmount
     log.push(`${target.card.name} 的护盾吸收了 ${absorbed} 点伤害。`)
     triggerCounter(target, attacker, log)
-    return remaining
+    return finalAmount
   }
 
   target.hp -= finalAmount
@@ -330,7 +360,7 @@ function applyDamage(
   return finalAmount
 }
 
-function triggerCounter(target: Fighter, attacker: Fighter | undefined, log: string[]) {
+function triggerCounter(target: TeamFighter, attacker: TeamFighter | undefined, log: string[]) {
   const counter = getStatus(target.statuses, "counter")
   if (!counter || !attacker || target.hp <= 0 || attacker.hp <= 0) return
 
@@ -340,25 +370,64 @@ function triggerCounter(target: Fighter, attacker: Fighter | undefined, log: str
   log.push(`${target.card.name} 反击 ${attacker.card.name}，造成 ${damage} 点伤害。`)
 }
 
-function getActionOrder(player: Fighter, enemy: Fighter): Fighter[] {
-  return currentSpeed(player) >= currentSpeed(enemy) ? [player, enemy] : [enemy, player]
+function selectTarget(actor: TeamFighter, enemies: TeamFighter[]): TeamFighter | undefined {
+  const living = getLivingFighters(enemies)
+  if (!living.length) return undefined
+  if (actor.card.selector === "lowest_hp_enemy") return living.toSorted((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+  if (actor.card.selector === "random_enemy") return living[Math.floor(Math.random() * living.length)]
+  return living.toSorted((a, b) => a.position - b.position)[0]
 }
 
-function currentSpeed(fighter: Fighter): number {
-  return fighter.card.spd + (getStatus(fighter.statuses, "speed_up")?.power ?? 0)
+function getEnemies(actor: TeamFighter, playerTeam: TeamFighter[], enemyTeam: TeamFighter[]) {
+  return actor.side === "player" ? enemyTeam : playerTeam
 }
 
-function isDefeated(fighter: Fighter): boolean {
+function getLivingFighters(fighters: TeamFighter[]) {
+  return fighters.filter((fighter) => !isDefeated(fighter))
+}
+
+function getDefeatedFighters(fighters: TeamFighter[]) {
+  return fighters.filter(isDefeated)
+}
+
+function isDefeated(fighter: TeamFighter) {
   return fighter.hp <= 0
 }
 
-function resolveResult(player: Fighter, enemy: Fighter): BattleOutcome["result"] {
-  if (player.hp <= 0 && enemy.hp <= 0) return "draw"
-  if (enemy.hp <= 0) return "win"
-  if (player.hp <= 0) return "loss"
+function isTeamDefeated(team: TeamFighter[]) {
+  return team.every(isDefeated)
+}
 
-  const playerRatio = player.hp / player.maxHp
-  const enemyRatio = enemy.hp / enemy.maxHp
-  if (Math.abs(playerRatio - enemyRatio) < 0.05) return "draw"
-  return playerRatio > enemyRatio ? "win" : "loss"
+function currentSpeed(fighter: TeamFighter) {
+  return fighter.card.spd + (getStatus(fighter.statuses, "speed_up")?.power ?? 0)
+}
+
+function resolveTeamResult(playerTeam: TeamFighter[], enemyTeam: TeamFighter[]): TeamBattleOutcome["result"] {
+  if (isTeamDefeated(playerTeam) && isTeamDefeated(enemyTeam)) return "draw"
+  if (isTeamDefeated(enemyTeam)) return "win"
+  if (isTeamDefeated(playerTeam)) return "loss"
+
+  const playerHp = remainingHp(playerTeam)
+  const enemyHp = remainingHp(enemyTeam)
+  if (Math.abs(playerHp - enemyHp) <= 3) return "draw"
+  return playerHp > enemyHp ? "win" : "loss"
+}
+
+function remainingHp(team: TeamFighter[]) {
+  return team.reduce((sum, fighter) => sum + Math.max(0, fighter.hp), 0)
+}
+
+function snapshotTeam(team: TeamFighter[]): TeamSnapshot[] {
+  return team.map((fighter) => ({
+    cardId: fighter.card.id,
+    name: fighter.card.name,
+    position: fighter.position,
+    hp: Math.max(0, fighter.hp),
+    maxHp: fighter.maxHp,
+    alive: fighter.hp > 0,
+  }))
+}
+
+function formatTeam(team: TeamFighter[]) {
+  return team.map((fighter) => `${fighter.position + 1}号位 ${fighter.card.name}`).join("、")
 }

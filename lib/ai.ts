@@ -3,7 +3,14 @@ import type { Element } from "./card/element"
 import { elementLabels } from "./card/element"
 import type { Rarity } from "./card/rarity"
 import { rarityLabels } from "./card/rarity"
-import type { SkillRule } from "./card/skill-generator"
+import {
+  conditionOptions,
+  effectOptions,
+  selectorOptions,
+  triggerOptions,
+  type SkillProposal,
+  type SkillRule,
+} from "./card/skill-generator"
 
 const aiCardSchema = z.object({
   name: z.string().min(1).max(24),
@@ -11,9 +18,14 @@ const aiCardSchema = z.object({
   skillName: z.string().min(1).max(24),
   skillText: z.string().min(1).max(90),
   description: z.string().min(1).max(180),
+  skillEffect: z.enum(effectOptions).optional(),
+  skillTrigger: z.enum(triggerOptions).optional(),
+  skillCondition: z.enum(conditionOptions).optional(),
+  skillSelector: z.enum(selectorOptions).optional(),
 })
 
 export type AiCardCopy = z.infer<typeof aiCardSchema>
+export type AiCardConcept = Omit<AiCardCopy, "skillEffect" | "skillTrigger" | "skillCondition" | "skillSelector">
 
 const overpowerWords = ["灭世", "创世", "无限", "秒杀", "无敌", "终焉", "毁灭宇宙", "不可阻挡"]
 
@@ -22,10 +34,10 @@ export async function generateCardCopy(input: {
   rarity: Rarity
   element: Element
   skill: SkillRule
-}): Promise<{ copy: AiCardCopy; rawOutput: string; source: "ai" | "fallback" }> {
+}): Promise<{ copy: AiCardConcept; skillProposal: SkillProposal; rawOutput: string; source: "ai" | "fallback" }> {
   if (!process.env.OPENAI_API_KEY) {
     const copy = fallbackCardCopy(input)
-    return { copy, rawOutput: JSON.stringify(copy), source: "fallback" }
+    return { copy, skillProposal: {}, rawOutput: JSON.stringify(copy), source: "fallback" }
   }
 
   const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1"
@@ -46,18 +58,22 @@ export async function generateCardCopy(input: {
         {
           role: "system",
           content:
-            "你只为怪物卡生成表现层 JSON，不允许输出真实数值、倍率、概率、胜率、稀有度或冷却。只返回 name, race, skillName, skillText, description。",
+            "你为怪物卡生成表现层 JSON 和一个可结算的技能意图。不要输出真实数值、倍率、概率、胜率、稀有度或冷却。技能意图必须从给定枚举中选择，避免总是选择灼烧；优先创造符合怪物设定的独特战斗方式。只返回 name, race, skillName, skillText, description, skillEffect, skillTrigger, skillCondition, skillSelector。",
         },
         {
           role: "user",
           content: JSON.stringify({
             userPrompt: input.prompt,
-            fixedRules: {
+            balanceContext: {
               rarity: input.rarity,
               rarityLabel: rarityLabels[input.rarity],
               element: input.element,
               elementLabel: elementLabels[input.element],
-              skill: input.skill,
+              fallbackSkill: input.skill,
+              allowedSkillEffects: effectOptions,
+              allowedTriggers: triggerOptions,
+              allowedConditions: conditionOptions,
+              allowedSelectors: selectorOptions,
             },
             styleRule: downgraded,
           }),
@@ -78,7 +94,15 @@ export async function generateCardCopy(input: {
     throw new Error("AI output did not match card copy schema")
   }
 
-  return { copy: sanitizeCopy(parsed.data, input), rawOutput, source: "ai" }
+  const copy = sanitizeCopy(parsed.data, input)
+  const skillProposal = {
+    effect: parsed.data.skillEffect,
+    trigger: parsed.data.skillTrigger,
+    condition: parsed.data.skillCondition,
+    selector: parsed.data.skillSelector,
+  }
+
+  return { copy, skillProposal, rawOutput, source: "ai" }
 }
 
 function fallbackCardCopy(input: {
@@ -86,7 +110,7 @@ function fallbackCardCopy(input: {
   rarity: Rarity
   element: Element
   skill: SkillRule
-}): AiCardCopy {
+}): AiCardConcept {
   const element = elementLabels[input.element]
   const intense = overpowerWords.some((word) => input.prompt.includes(word))
   const prefix = input.rarity === "common" && intense ? "封印" : rarityLabels[input.rarity]
@@ -108,17 +132,25 @@ function fallbackCardCopy(input: {
   )
 }
 
-function sanitizeCopy(copy: AiCardCopy, input: { rarity: Rarity; prompt: string }): AiCardCopy {
-  if (input.rarity !== "common") return copy
+function sanitizeCopy(copy: AiCardCopy, input: { rarity: Rarity; prompt: string }): AiCardConcept {
+  const sanitized = {
+    name: copy.name,
+    race: copy.race,
+    skillName: copy.skillName,
+    skillText: copy.skillText,
+    description: copy.description,
+  }
+
+  if (input.rarity !== "common") return sanitized
   const replacer = (text: string) =>
     overpowerWords.reduce((value, word) => value.replaceAll(word, "未觉醒"), text)
 
   return {
-    name: replacer(copy.name),
-    race: copy.race,
-    skillName: replacer(copy.skillName),
-    skillText: replacer(copy.skillText),
-    description: replacer(copy.description),
+    name: replacer(sanitized.name),
+    race: sanitized.race,
+    skillName: replacer(sanitized.skillName),
+    skillText: replacer(sanitized.skillText),
+    description: replacer(sanitized.description),
   }
 }
 

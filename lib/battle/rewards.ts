@@ -1,4 +1,5 @@
 import type { Card } from "@prisma/client"
+import { getBattleExp } from "@/lib/card/card-progression"
 
 const rewardNames = {
   damage: "裂击核心",
@@ -21,7 +22,7 @@ const rewardNames = {
 } as const
 
 export function buildBattleReward(winner: Card, result: "win" | "loss" | "draw") {
-  const exp = result === "win" ? 12 : result === "draw" ? 6 : 4
+  const exp = getBattleExp(result)
   const componentChance = result === "win" ? 0.55 : 0.15
   const component =
     Math.random() < componentChance

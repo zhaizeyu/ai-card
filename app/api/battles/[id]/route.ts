@@ -20,6 +20,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       ...battle,
       battleLog: JSON.parse(battle.battleLog) as string[],
       rewardJson: battle.rewardJson ? JSON.parse(battle.rewardJson) : null,
+      playerTeamJson: battle.playerTeamJson ? JSON.parse(battle.playerTeamJson) : null,
+      enemyTeamJson: battle.enemyTeamJson ? JSON.parse(battle.enemyTeamJson) : null,
     },
   })
 }

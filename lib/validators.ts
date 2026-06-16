@@ -11,9 +11,24 @@ export const promptSchema = z.object({
 export const battleRequestSchema = z.object({
   cardId: z.string().min(1),
   opponentCardId: z.string().min(1).optional(),
+  cardIds: z.array(z.string().min(1)).min(1).max(3).optional(),
+  opponentCardIds: z.array(z.string().min(1)).min(1).max(3).optional(),
 }).refine((data) => data.cardId !== data.opponentCardId, {
   message: "请选择两张不同的卡牌",
   path: ["opponentCardId"],
+}).refine((data) => {
+  if (!data.cardIds?.length) return true
+  return new Set(data.cardIds).size === data.cardIds.length
+}, {
+  message: "队伍中不能选择重复卡牌",
+  path: ["cardIds"],
+}).refine((data) => {
+  if (!data.cardIds?.length || !data.opponentCardIds?.length) return true
+  const playerIds = new Set(data.cardIds)
+  return data.opponentCardIds.every((id) => !playerIds.has(id))
+}, {
+  message: "敌我队伍不能使用同一张卡牌",
+  path: ["opponentCardIds"],
 })
 
 export const cardListQuerySchema = z.object({

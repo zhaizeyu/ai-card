@@ -32,6 +32,13 @@ model Card {
   imageUrl    String?
   level       Int      @default(1)
   exp         Int      @default(0)
+  growthType  String   @default("balanced")
+  title       String?
+  evolutionStage Int   @default(0)
+  passiveUnlocked Boolean @default(false)
+  upgradeUnlocked Boolean @default(false)
+  passiveComponent String?
+  upgradeComponent String?
   wins        Int      @default(0)
   losses      Int      @default(0)
   createdAt   DateTime @default(now())
@@ -46,9 +53,12 @@ model Battle {
   id           String   @id @default(cuid())
   playerCardId String
   enemyCardId  String?
+  mode         String   @default("solo")
   result       String
   winnerCardId String?
   loserCardId  String?
+  playerTeamJson String?
+  enemyTeamJson  String?
   battleLog    String
   rewardJson   String?
   createdAt    DateTime @default(now())

@@ -4,6 +4,14 @@ import { RarityBadge } from "./RarityBadge"
 import { SkillBox } from "./SkillBox"
 import { StatBar } from "./StatBar"
 
+const growthTypeLabels: Record<string, string> = {
+  bruiser: "强攻成长",
+  tank: "守卫成长",
+  swift: "迅捷成长",
+  balanced: "均衡成长",
+  support: "支援成长",
+}
+
 export function MonsterCard({ card, compact = false }: { card: Card; compact?: boolean }) {
   return (
     <article className="overflow-hidden rounded-lg border border-ink/10 bg-white shadow-card">
@@ -16,7 +24,10 @@ export function MonsterCard({ card, compact = false }: { card: Card; compact?: b
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-bold leading-tight">{card.name}</h2>
-            <p className="mt-1 text-sm text-ink/60">{card.race ?? "未知种族"}</p>
+            <p className="mt-1 text-sm text-ink/60">
+              {card.title ? `${card.title} · ` : ""}
+              {card.race ?? "未知种族"}
+            </p>
           </div>
           <div className="flex gap-2">
             <RarityBadge rarity={card.rarity} />
@@ -36,8 +47,11 @@ export function MonsterCard({ card, compact = false }: { card: Card; compact?: b
             <SkillBox card={card} />
             <p className="text-sm leading-6 text-ink/70">{card.description}</p>
             <div className="flex flex-wrap gap-3 text-xs font-semibold text-ink/60">
-              <span>Lv.{card.level}</span>
+              <span>Lv.{card.level}/10</span>
               <span>EXP {card.exp}</span>
+              <span>{growthTypeLabels[card.growthType] ?? card.growthType}</span>
+              {card.passiveUnlocked && <span>被动槽已解锁</span>}
+              {card.upgradeUnlocked && <span>强化组件已解锁</span>}
               <span>{card.wins} 胜</span>
               <span>{card.losses} 负</span>
               <span>Power {card.powerScore}</span>

@@ -19,6 +19,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <div className="flex items-center gap-4 text-sm font-semibold text-ink/70">
               <Link href="/create">生成</Link>
               <Link href="/gallery">图鉴</Link>
+              <Link href="/components">组件</Link>
               <Link href="/world">小世界</Link>
             </div>
           </nav>

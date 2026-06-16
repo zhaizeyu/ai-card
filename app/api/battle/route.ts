@@ -3,6 +3,9 @@ import { createMonsterCard } from "@/lib/card/card-generator"
 import { prisma } from "@/lib/db"
 import { runBattle } from "@/lib/battle/battle-engine"
 import { buildBattleReward } from "@/lib/battle/rewards"
+import { runTeamBattle } from "@/lib/battle/team-battle-engine"
+import { applyCardProgression } from "@/lib/card/card-progression"
+import { pickPassiveComponent, pickUpgradeComponent } from "@/lib/card/components"
 import { battleRequestSchema } from "@/lib/validators"
 
 const enemyPrompts = ["铁甲菇怪", "潮汐小妖", "风铃狼灵", "碎岩泥偶", "暗影灯蛾", "火花猫妖"]
@@ -10,7 +13,112 @@ const enemyPrompts = ["铁甲菇怪", "潮汐小妖", "风铃狼灵", "碎岩泥
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { cardId, opponentCardId } = battleRequestSchema.parse(body)
+    const { cardId, opponentCardId, cardIds, opponentCardIds } = battleRequestSchema.parse(body)
+
+    if (cardIds?.length) {
+      const playerCards = await prisma.card.findMany({ where: { id: { in: cardIds } } })
+      const orderedPlayerCards = cardIds
+        .map((id) => playerCards.find((card) => card.id === id))
+        .filter((card): card is (typeof playerCards)[number] => Boolean(card))
+
+      if (orderedPlayerCards.length !== cardIds.length) {
+        return NextResponse.json({ error: "Team card not found" }, { status: 404 })
+      }
+
+      const enemyCards = opponentCardIds?.length
+        ? await prisma.card.findMany({ where: { id: { in: opponentCardIds } } })
+        : await Promise.all(
+            orderedPlayerCards.map(() => createMonsterCard(enemyPrompts[Math.floor(Math.random() * enemyPrompts.length)])),
+          )
+      const orderedEnemyCards = opponentCardIds?.length
+        ? opponentCardIds
+            .map((id) => enemyCards.find((card) => card.id === id))
+            .filter((card): card is (typeof enemyCards)[number] => Boolean(card))
+        : enemyCards
+
+      if (!orderedEnemyCards.length || (opponentCardIds?.length && orderedEnemyCards.length !== opponentCardIds.length)) {
+        return NextResponse.json({ error: "Opponent team card not found" }, { status: 404 })
+      }
+
+      const isSimulation = Boolean(opponentCardIds?.length)
+      const outcome = runTeamBattle(orderedPlayerCards, orderedEnemyCards)
+      const reward = isSimulation
+        ? { exp: 0, component: null, team: [] }
+        : {
+            exp: outcome.result === "win" ? 8 : outcome.result === "draw" ? 4 : 3,
+            component: buildBattleReward(outcome.result === "win" ? orderedPlayerCards[0] : orderedEnemyCards[0], outcome.result).component,
+            team: [] as Array<{
+              cardId: string
+              exp: number
+              levelsGained: number
+              level: number
+              unlocked: string[]
+              title?: string | null
+            }>,
+          }
+
+      if (!isSimulation) {
+        for (const card of orderedPlayerCards) {
+          const progression = applyCardProgression(card, outcome.result, reward.exp)
+          reward.team.push({
+            cardId: card.id,
+            exp: reward.exp,
+            levelsGained: progression.levelsGained,
+            level: progression.level,
+            unlocked: progression.unlocked,
+            title: progression.title,
+          })
+          await prisma.card.update({
+            where: { id: card.id },
+            data: {
+              exp: progression.exp,
+              level: progression.level,
+              hp: progression.hp,
+              atk: progression.atk,
+              def: progression.def,
+              spd: progression.spd,
+              powerScore: progression.hp + progression.atk * 4 + progression.def * 3 + progression.spd * 3,
+              effectPower: progression.effectPower,
+              cooldown: progression.cooldown,
+              title: progression.title,
+              passiveUnlocked: progression.passiveUnlocked,
+              upgradeUnlocked: progression.upgradeUnlocked,
+              passiveComponent: card.passiveComponent ?? pickPassiveComponent(card),
+              upgradeComponent: card.upgradeComponent ?? pickUpgradeComponent(card),
+              wins: outcome.result === "win" ? { increment: 1 } : undefined,
+              losses: outcome.result === "loss" ? { increment: 1 } : undefined,
+            },
+          })
+        }
+      }
+
+      const battle = await prisma.battle.create({
+        data: {
+          playerCardId: orderedPlayerCards[0].id,
+          enemyCardId: orderedEnemyCards[0].id,
+          mode: "team",
+          result: outcome.result,
+          winnerCardId: outcome.winnerCardId,
+          loserCardId: outcome.loserCardId,
+          playerTeamJson: JSON.stringify(outcome.playerTeam),
+          enemyTeamJson: JSON.stringify(outcome.enemyTeam),
+          battleLog: JSON.stringify(outcome.log),
+          rewardJson: JSON.stringify(reward),
+        },
+      })
+
+      if (reward.component && outcome.result === "win" && !isSimulation) {
+        await prisma.componentReward.create({ data: reward.component })
+      }
+
+      return NextResponse.json({
+        battleId: battle.id,
+        result: outcome.result,
+        log: outcome.log,
+        reward,
+      })
+    }
+
     const playerCard = await prisma.card.findUnique({ where: { id: cardId } })
 
     if (!playerCard) {
@@ -31,6 +139,16 @@ export async function POST(request: Request) {
     const reward = isSimulation
       ? { exp: 0, component: null }
       : buildBattleReward(playerResult === "win" ? playerCard : enemyCard, playerResult)
+    const progression = !isSimulation ? applyCardProgression(playerCard, playerResult) : null
+    const rewardPayload = progression
+      ? {
+          ...reward,
+          levelsGained: progression.levelsGained,
+          level: progression.level,
+          unlocked: progression.unlocked,
+          title: progression.title,
+        }
+      : reward
 
     const battle = await prisma.battle.create({
       data: {
@@ -40,18 +158,30 @@ export async function POST(request: Request) {
         winnerCardId: outcome.winnerCardId,
         loserCardId: outcome.loserCardId,
         battleLog: JSON.stringify(outcome.log),
-        rewardJson: JSON.stringify(reward),
+        rewardJson: JSON.stringify(rewardPayload),
       },
     })
 
-    if (!isSimulation) {
+    if (progression) {
       await prisma.card.update({
         where: { id: playerCard.id },
         data: {
-          exp: { increment: reward.exp },
+          exp: progression.exp,
+          level: progression.level,
+          hp: progression.hp,
+          atk: progression.atk,
+          def: progression.def,
+          spd: progression.spd,
+          powerScore: progression.hp + progression.atk * 4 + progression.def * 3 + progression.spd * 3,
+          effectPower: progression.effectPower,
+          cooldown: progression.cooldown,
+          title: progression.title,
+          passiveUnlocked: progression.passiveUnlocked,
+          upgradeUnlocked: progression.upgradeUnlocked,
+          passiveComponent: playerCard.passiveComponent ?? pickPassiveComponent(playerCard),
+          upgradeComponent: playerCard.upgradeComponent ?? pickUpgradeComponent(playerCard),
           wins: playerResult === "win" ? { increment: 1 } : undefined,
           losses: playerResult === "loss" ? { increment: 1 } : undefined,
-          level: playerCard.exp + reward.exp >= playerCard.level * 30 ? { increment: 1 } : undefined,
         },
       })
     }
@@ -64,7 +194,7 @@ export async function POST(request: Request) {
       battleId: battle.id,
       result: playerResult,
       log: outcome.log,
-      reward,
+      reward: rewardPayload,
     })
   } catch (error) {
     return NextResponse.json(
