@@ -2,6 +2,7 @@ node_modules
 .next
 .next-dev
 .dev
+dist
 .env
 data/*.db
 data/*.db-journal

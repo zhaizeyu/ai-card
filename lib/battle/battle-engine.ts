@@ -307,7 +307,7 @@ function applyDamage(
 ): number {
   const mark = getStatus(target.statuses, "mark")
   const focus = attacker ? getStatus(attacker.statuses, "focus") : undefined
-  let finalAmount = amount + (mark ? mark.power : 0) + (focus ? focus.power * 2 : 0)
+  const finalAmount = amount + (mark ? mark.power : 0) + (focus ? focus.power * 2 : 0)
 
   if (focus && attacker) {
     attacker.statuses = removeStatus(attacker.statuses, "focus")

@@ -2,15 +2,14 @@
 
 import type { Card } from "@prisma/client"
 import { Check, Eye, Swords, X } from "lucide-react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
 import { MonsterCard } from "@/components/cards/MonsterCard"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 export function BattlePairPicker({ cards }: { cards: Card[] }) {
-  const router = useRouter()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<"solo" | "team">("solo")
   const [soloIds, setSoloIds] = useState<string[]>([])
   const [playerIds, setPlayerIds] = useState<string[]>([])
@@ -34,7 +33,6 @@ export function BattlePairPicker({ cards }: { cards: Card[] }) {
       return
     }
 
-    const currentIds = editingSide === "player" ? playerIds : enemyIds
     const otherIds = editingSide === "player" ? enemyIds : playerIds
     const setCurrentIds = editingSide === "player" ? setPlayerIds : setEnemyIds
 
@@ -81,7 +79,7 @@ export function BattlePairPicker({ cards }: { cards: Card[] }) {
       return
     }
 
-    router.push(`/battles/${data.battleId}`)
+    navigate(`/battles/${data.battleId}`)
   }
 
   if (!cards.length) {
