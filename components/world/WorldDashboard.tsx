@@ -1,8 +1,8 @@
 "use client"
 
 import { Boxes, CalendarDays, CheckCircle2, Flame, HeartHandshake, Shield, Swords, Trophy, Users } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Panel } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -81,7 +81,7 @@ const roles = [
 ] as const
 
 export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents, inventory }: Props) {
-  const navigate = useNavigate()
+  const router = useRouter()
   const [loading, setLoading] = useState("")
   const [error, setError] = useState("")
   const [selectedComponent, setSelectedComponent] = useState(inventory.find((item) => !item.equippedCardId)?.id ?? "")
@@ -119,25 +119,25 @@ export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents,
   async function assignTeam(role: (typeof roles)[number]["id"], cardId: string) {
     if (!cardId) return
     const data = await postWorldAction({ action: "assign_team", worldId: world.id, role, cardId }, `assign-${role}`)
-    if (data) window.location.reload()
+    if (data) router.refresh()
   }
 
   async function advanceDay() {
     const data = await postWorldAction({ action: "advance_day", worldId: world.id }, "advance")
-    if (data) window.location.reload()
+    if (data) router.refresh()
   }
 
   async function trainBond() {
     const data = await postWorldAction({ action: "train_bond", worldId: world.id }, "train-bond")
-    if (data) window.location.reload()
+    if (data) router.refresh()
   }
 
   async function resolveEvent(approach: "fight" | "caution" | "negotiate") {
     if (!pendingEvent) return
     const data = await postWorldAction({ action: "resolve_event", eventId: pendingEvent.id, approach }, `resolve-${approach}`)
     if (!data) return
-    if (data.battleId) navigate(`/battles/${data.battleId}`)
-    else window.location.reload()
+    if (data.battleId) router.push(`/battles/${data.battleId}`)
+    else router.refresh()
   }
 
   async function equipSelectedComponent() {
@@ -146,7 +146,7 @@ export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents,
       { action: "equip_component", componentId: selectedComponent, cardId: selectedEquipCard },
       "equip",
     )
-    if (data) window.location.reload()
+    if (data) router.refresh()
   }
 
   return (

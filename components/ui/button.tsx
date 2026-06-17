@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
 import { cn } from "@/lib/utils"
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -16,12 +15,10 @@ export function Button({ className, variant = "primary", asChild = false, childr
     className,
   )
 
-  if (asChild) {
-    return (
-      <Slot className={classes} {...props}>
-        {children}
-      </Slot>
-    )
+  if (asChild && React.isValidElement<{ className?: string }>(children)) {
+    return React.cloneElement(children, {
+      className: cn(classes, children.props.className),
+    })
   }
 
   return (

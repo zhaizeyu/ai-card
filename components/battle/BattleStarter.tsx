@@ -1,12 +1,12 @@
 "use client"
 
 import { Swords } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 
 export function BattleStarter({ cardId }: { cardId: string }) {
-  const navigate = useNavigate()
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -26,7 +26,7 @@ export function BattleStarter({ cardId }: { cardId: string }) {
       return
     }
 
-    navigate(`/battles/${data.battleId}`)
+    router.push(`/battles/${data.battleId}`)
   }
 
   return (

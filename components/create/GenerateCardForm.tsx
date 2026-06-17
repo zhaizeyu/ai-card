@@ -1,12 +1,12 @@
 "use client"
 
 import { WandSparkles } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { FormEvent, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 
 export function GenerateCardForm() {
-  const navigate = useNavigate()
+  const router = useRouter()
   const [prompt, setPrompt] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -29,7 +29,7 @@ export function GenerateCardForm() {
       return
     }
 
-    navigate(`/cards/${data.cardId}`)
+    router.push(`/cards/${data.cardId}`)
   }
 
   return (
