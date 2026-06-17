@@ -2,7 +2,7 @@ import { WorldDashboard } from "@/components/world/WorldDashboard"
 import { prisma } from "@/lib/db"
 import { getOrCreateWorld, teamRoles } from "@/lib/world/world-game"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 10
 
 export default async function WorldPage() {
   const world = await getOrCreateWorld()

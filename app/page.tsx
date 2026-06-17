@@ -1,10 +1,10 @@
-import Link from "next/link"
 import { ArrowRight, Sparkles, Swords, Telescope } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrefetchLink } from "@/components/navigation/PrefetchLink"
 import { prisma } from "@/lib/db"
 import { MonsterCard } from "@/components/cards/MonsterCard"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 30
 
 export default async function HomePage() {
   const latestCards = await prisma.card.findMany({ orderBy: { createdAt: "desc" }, take: 3 })
@@ -25,16 +25,16 @@ export default async function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild className="gap-2">
-                <Link href="/create">
+                <PrefetchLink href="/create">
                   开始生成 <ArrowRight className="h-4 w-4" />
-                </Link>
+                </PrefetchLink>
               </Button>
-              <Link className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/gallery">
+              <PrefetchLink className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/gallery">
                 查看图鉴
-              </Link>
-              <Link className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/world">
+              </PrefetchLink>
+              <PrefetchLink className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/world">
                 进入小世界
-              </Link>
+              </PrefetchLink>
             </div>
           </div>
           <div className="grid gap-3">
@@ -63,16 +63,16 @@ export default async function HomePage() {
             <h2 className="text-2xl font-black">最新卡牌</h2>
             <p className="mt-1 text-sm text-ink/60">生成后会自动出现在这里。</p>
           </div>
-          <Link href="/gallery" className="text-sm font-semibold text-ink/70">
+          <PrefetchLink href="/gallery" className="text-sm font-semibold text-ink/70">
             全部
-          </Link>
+          </PrefetchLink>
         </div>
         {latestCards.length ? (
           <div className="grid gap-5 md:grid-cols-3">
             {latestCards.map((card) => (
-              <Link key={card.id} href={`/cards/${card.id}`}>
+              <PrefetchLink key={card.id} href={`/cards/${card.id}`}>
                 <MonsterCard card={card} compact />
-              </Link>
+              </PrefetchLink>
             ))}
           </div>
         ) : (

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { createMonsterCard } from "@/lib/card/card-generator"
 import { promptSchema } from "@/lib/validators"
 
@@ -7,6 +8,10 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { prompt } = promptSchema.parse(body)
     const card = await createMonsterCard(prompt)
+    revalidatePath("/")
+    revalidatePath("/gallery")
+    revalidatePath("/world")
+    revalidatePath(`/cards/${card.id}`)
 
     return NextResponse.json({ cardId: card.id })
   } catch (error) {

@@ -1,9 +1,11 @@
-import Link from "next/link"
 import { notFound } from "next/navigation"
 import { BattleLog } from "@/components/battle/BattleLog"
 import { MonsterCard } from "@/components/cards/MonsterCard"
+import { PrefetchLink } from "@/components/navigation/PrefetchLink"
 import { Button } from "@/components/ui/button"
 import { prisma } from "@/lib/db"
+
+export const revalidate = 300
 
 export default async function BattleResultPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -51,7 +53,7 @@ export default async function BattleResultPage({ params }: { params: Promise<{ i
           </h1>
         </div>
         <Button asChild>
-          <Link href={`/battle/${battle.playerCardId}`}>再次战斗</Link>
+          <PrefetchLink href={`/battle/${battle.playerCardId}`}>再次战斗</PrefetchLink>
         </Button>
       </div>
 

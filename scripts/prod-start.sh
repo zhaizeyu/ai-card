@@ -3,18 +3,16 @@ set -eu
 
 PORT="${PORT:-3002}"
 HOST="${HOST:-0.0.0.0}"
-PID_FILE="${PID_FILE:-.dev/dev-server.pid}"
-LOG_FILE="${LOG_FILE:-.dev/dev-server.log}"
-DEV_DIST_DIR="${NEXT_DIST_DIR:-.next-dev}"
-PREWARM="${PREWARM:-1}"
-PREWARM_ROUTES="${PREWARM_ROUTES:-/ /create /gallery /world /components}"
+PID_FILE="${PID_FILE:-.prod/prod-server.pid}"
+LOG_FILE="${LOG_FILE:-.prod/prod-server.log}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
 
 mkdir -p "$(dirname "$PID_FILE")" "$(dirname "$LOG_FILE")"
 
 if [ -f "$PID_FILE" ]; then
   PID="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-    echo "Dev server already running: pid=$PID port=$PORT"
+    echo "Production server already running: pid=$PID port=$PORT"
     exit 0
   fi
   rm -f "$PID_FILE"
@@ -25,11 +23,16 @@ if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | gre
   exit 1
 fi
 
-echo "Starting dev server on http://$HOST:$PORT"
+if [ "$SKIP_BUILD" != "1" ]; then
+  echo "Building production bundle..."
+  npm run build
+fi
+
+echo "Starting production server on http://$HOST:$PORT"
 if command -v setsid >/dev/null 2>&1; then
-  NEXT_DIST_DIR="$DEV_DIST_DIR" setsid ./node_modules/.bin/next dev --turbo -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 < /dev/null &
+  setsid ./node_modules/.bin/next start -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 < /dev/null &
 else
-  NEXT_DIST_DIR="$DEV_DIST_DIR" nohup ./node_modules/.bin/next dev --turbo -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 &
+  nohup ./node_modules/.bin/next start -H "$HOST" -p "$PORT" >"$LOG_FILE" 2>&1 &
 fi
 PID="$!"
 echo "$PID" >"$PID_FILE"
@@ -50,17 +53,10 @@ if [ "$READY" -eq 1 ]; then
 fi
 
 if [ "$READY" -eq 1 ] && kill -0 "$PID" 2>/dev/null; then
-  echo "Dev server started: pid=$PID"
+  echo "Production server started: pid=$PID"
   echo "Log: $LOG_FILE"
-  if [ "$PREWARM" = "1" ] && command -v curl >/dev/null 2>&1; then
-    BASE_URL="http://127.0.0.1:$PORT"
-    echo "Prewarming dev routes: $PREWARM_ROUTES"
-    for ROUTE in $PREWARM_ROUTES; do
-      curl -fsS -o /dev/null "$BASE_URL$ROUTE" >/dev/null 2>&1 || true
-    done
-  fi
 else
-  echo "Dev server failed to start. Last log lines:"
+  echo "Production server failed to start. Last log lines:"
   tail -n 40 "$LOG_FILE" || true
   rm -f "$PID_FILE"
   exit 1

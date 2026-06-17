@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { createMonsterCard } from "@/lib/card/card-generator"
 import { prisma } from "@/lib/db"
 import { runBattle } from "@/lib/battle/battle-engine"
@@ -112,6 +113,14 @@ export async function POST(request: Request) {
       if (reward.component && outcome.result === "win" && !isSimulation) {
         await prisma.componentReward.create({ data: reward.component })
       }
+      revalidatePath("/")
+      revalidatePath("/gallery")
+      revalidatePath("/world")
+      revalidatePath(`/battles/${battle.id}`)
+      orderedPlayerCards.forEach((card) => {
+        revalidatePath(`/cards/${card.id}`)
+        revalidatePath(`/battle/${card.id}`)
+      })
 
       return NextResponse.json({
         battleId: battle.id,
@@ -191,6 +200,12 @@ export async function POST(request: Request) {
     if (reward.component && playerResult === "win" && !isSimulation) {
       await prisma.componentReward.create({ data: reward.component })
     }
+    revalidatePath("/")
+    revalidatePath("/gallery")
+    revalidatePath("/world")
+    revalidatePath(`/cards/${playerCard.id}`)
+    revalidatePath(`/battle/${playerCard.id}`)
+    revalidatePath(`/battles/${battle.id}`)
 
     return NextResponse.json({
       battleId: battle.id,

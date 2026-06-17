@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import Link from "next/link"
+import { PrefetchLink } from "@/components/navigation/PrefetchLink"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -13,14 +13,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <header className="border-b border-ink/10 bg-white/80 backdrop-blur">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-sm font-black tracking-wide">
+            <PrefetchLink href="/" className="text-sm font-black tracking-wide">
               AI Monster Cards
-            </Link>
+            </PrefetchLink>
             <div className="flex items-center gap-4 text-sm font-semibold text-ink/70">
-              <Link href="/create">生成</Link>
-              <Link href="/gallery">图鉴</Link>
-              <Link href="/components">组件</Link>
-              <Link href="/world">小世界</Link>
+              <PrefetchLink href="/create">生成</PrefetchLink>
+              <PrefetchLink href="/gallery">图鉴</PrefetchLink>
+              <PrefetchLink href="/components">组件</PrefetchLink>
+              <PrefetchLink href="/world">小世界</PrefetchLink>
             </div>
           </nav>
         </header>

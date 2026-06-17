@@ -4,6 +4,8 @@ import { MonsterCard } from "@/components/cards/MonsterCard"
 import { Panel } from "@/components/ui/card"
 import { prisma } from "@/lib/db"
 
+export const revalidate = 30
+
 export default async function BattlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const card = await prisma.card.findUnique({ where: { id } })

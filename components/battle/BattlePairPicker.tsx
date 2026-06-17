@@ -2,10 +2,10 @@
 
 import type { Card } from "@prisma/client"
 import { Check, Eye, Swords, X } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { MonsterCard } from "@/components/cards/MonsterCard"
+import { PrefetchLink } from "@/components/navigation/PrefetchLink"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -205,13 +205,13 @@ export function BattlePairPicker({ cards }: { cards: Card[] }) {
                   </span>
                 ) : null}
               </button>
-              <Link
+              <PrefetchLink
                 href={`/cards/${card.id}`}
                 className="inline-flex h-9 items-center rounded-md border border-ink/15 bg-white px-3 text-sm font-semibold text-ink/70 hover:bg-ink/5"
               >
                 <Eye className="mr-2 h-4 w-4" />
                 详情
-              </Link>
+              </PrefetchLink>
             </div>
           )
         })}

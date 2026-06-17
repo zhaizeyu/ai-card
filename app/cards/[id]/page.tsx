@@ -1,10 +1,12 @@
-import Link from "next/link"
 import { notFound } from "next/navigation"
 import { MonsterCard } from "@/components/cards/MonsterCard"
+import { PrefetchLink } from "@/components/navigation/PrefetchLink"
 import { Button } from "@/components/ui/button"
 import { getComponentById } from "@/lib/card/components"
 import { getExpNeed } from "@/lib/card/card-progression"
 import { prisma } from "@/lib/db"
+
+export const revalidate = 30
 
 export default async function CardDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -49,14 +51,14 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div className="flex flex-wrap gap-3">
           <Button asChild>
-            <Link href={`/battle/${card.id}`}>进入战斗</Link>
+            <PrefetchLink href={`/battle/${card.id}`}>进入战斗</PrefetchLink>
           </Button>
-          <Link className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/world">
+          <PrefetchLink className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/world">
             加入小世界
-          </Link>
-          <Link className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/create">
+          </PrefetchLink>
+          <PrefetchLink className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/create">
             再生成一张
-          </Link>
+          </PrefetchLink>
         </div>
       </section>
     </main>

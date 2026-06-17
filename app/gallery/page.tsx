@@ -1,7 +1,7 @@
 import { BattlePairPicker } from "@/components/battle/BattlePairPicker"
 import { prisma } from "@/lib/db"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 30
 
 export default async function GalleryPage() {
   const cards = await prisma.card.findMany({ orderBy: { createdAt: "desc" }, take: 50 })
