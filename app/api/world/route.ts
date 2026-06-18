@@ -5,8 +5,10 @@ import {
   assignTeamCard,
   equipComponent,
   getOrCreateWorld,
+  exploreWorldLocation,
   resolveWorldEvent,
   trainTeamBond,
+  travelWorldLocation,
 } from "@/lib/world/world-game"
 import { worldActionSchema } from "@/lib/validators"
 
@@ -29,6 +31,18 @@ export async function POST(request: Request) {
 
     if (payload.action === "advance_day") {
       await advanceWorldDay(payload.worldId)
+      revalidatePath("/world")
+      return NextResponse.json({ ok: true })
+    }
+
+    if (payload.action === "travel_location") {
+      await travelWorldLocation(payload.worldId, payload.locationId)
+      revalidatePath("/world")
+      return NextResponse.json({ ok: true })
+    }
+
+    if (payload.action === "explore_location") {
+      await exploreWorldLocation(payload.worldId, payload.locationId)
       revalidatePath("/world")
       return NextResponse.json({ ok: true })
     }

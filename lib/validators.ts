@@ -52,6 +52,16 @@ export const worldActionSchema = z.discriminatedUnion("action", [
     worldId: z.string().min(1),
   }),
   z.object({
+    action: z.literal("travel_location"),
+    worldId: z.string().min(1),
+    locationId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("explore_location"),
+    worldId: z.string().min(1),
+    locationId: z.string().min(1),
+  }),
+  z.object({
     action: z.literal("train_bond"),
     worldId: z.string().min(1),
   }),

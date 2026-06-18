@@ -97,6 +97,8 @@ model World {
   theme       String
   description String?
   day         Int      @default(1)
+  actionPoints Int     @default(4)
+  currentLocationId String?
   prosperity  Int      @default(30)
   safety      Int      @default(30)
   resource    Int      @default(30)
@@ -105,8 +107,29 @@ model World {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  cards  WorldCard[]
-  events WorldEvent[]
+  cards     WorldCard[]
+  events    WorldEvent[]
+  locations WorldLocation[]
+}
+
+model WorldLocation {
+  id          String   @id @default(cuid())
+  worldId     String
+  slug        String
+  name        String
+  biome       String
+  description String
+  x           Int
+  y           Int
+  danger      Int      @default(1)
+  unlocked    Boolean  @default(false)
+  discovered  Boolean  @default(false)
+  connections String
+  createdAt   DateTime @default(now())
+
+  world World @relation(fields: [worldId], references: [id])
+
+  @@unique([worldId, slug])
 }
 
 model WorldCard {
@@ -124,6 +147,7 @@ model WorldCard {
 model WorldEvent {
   id          String   @id @default(cuid())
   worldId     String
+  locationId  String?
   day         Int
   type        String
   title       String

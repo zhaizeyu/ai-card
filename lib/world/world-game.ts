@@ -1,4 +1,4 @@
-import type { Card, ComponentReward, World, WorldCard, WorldEvent } from "@prisma/client"
+import type { Card, ComponentReward, World, WorldCard, WorldEvent, WorldLocation } from "@prisma/client"
 import { createMonsterCard } from "@/lib/card/card-generator"
 import { pickUpgradeComponent } from "@/lib/card/components"
 import { applyCardProgression } from "@/lib/card/card-progression"
@@ -33,6 +33,110 @@ type EventTemplate = {
   reward: WorldRewardPayload
   enemyPrompts: string[]
 }
+
+type LocationSeed = {
+  slug: string
+  name: string
+  biome: string
+  description: string
+  x: number
+  y: number
+  danger: number
+  unlocked?: boolean
+  discovered?: boolean
+  connections: string[]
+}
+
+const maxActionPoints = 4
+
+const locationSeeds: LocationSeed[] = [
+  {
+    slug: "hearthfield",
+    name: "炉心营地",
+    biome: "据点",
+    description: "怪物伙伴和居民共同建立的临时营地，地图探索从这里开始。",
+    x: 48,
+    y: 58,
+    danger: 1,
+    unlocked: true,
+    discovered: true,
+    connections: ["mosswood", "sunken-road", "glass-ruins"],
+  },
+  {
+    slug: "mosswood",
+    name: "苔光森林",
+    biome: "森林",
+    description: "树冠下散落着发光孢子，适合采集，也容易遇到伏击。",
+    x: 26,
+    y: 35,
+    danger: 2,
+    unlocked: true,
+    discovered: true,
+    connections: ["hearthfield", "storm-cliff", "moonwell"],
+  },
+  {
+    slug: "sunken-road",
+    name: "沉没古道",
+    biome: "遗迹",
+    description: "半截道路陷入湿地，石碑上的符文会回应高智慧的怪物伙伴。",
+    x: 70,
+    y: 42,
+    danger: 3,
+    unlocked: true,
+    discovered: true,
+    connections: ["hearthfield", "ash-volcano", "mirror-port"],
+  },
+  {
+    slug: "glass-ruins",
+    name: "玻璃废墟",
+    biome: "废墟",
+    description: "被旧日魔力结晶化的城区，混沌裂隙常在夜间闪烁。",
+    x: 54,
+    y: 18,
+    danger: 4,
+    connections: ["hearthfield", "storm-cliff", "ash-volcano"],
+  },
+  {
+    slug: "storm-cliff",
+    name: "雷鸣断崖",
+    biome: "高地",
+    description: "风暴长期盘旋的断崖，速度型和雷火系怪物能找到捷径。",
+    x: 16,
+    y: 70,
+    danger: 5,
+    connections: ["mosswood", "glass-ruins"],
+  },
+  {
+    slug: "moonwell",
+    name: "月井湿原",
+    biome: "湿地",
+    description: "静水中倒映着不存在的月亮，适合恢复，也可能诱发幻觉事件。",
+    x: 35,
+    y: 82,
+    danger: 3,
+    connections: ["mosswood", "mirror-port"],
+  },
+  {
+    slug: "mirror-port",
+    name: "镜潮港",
+    biome: "港口",
+    description: "潮汐像镜面一样反射远方区域，水系伙伴会改变这里的事件权重。",
+    x: 83,
+    y: 76,
+    danger: 4,
+    connections: ["sunken-road", "moonwell"],
+  },
+  {
+    slug: "ash-volcano",
+    name: "灰烬火山",
+    biome: "火山",
+    description: "火山深处有强化组件矿脉，危险度很高，但奖励也更集中。",
+    x: 86,
+    y: 16,
+    danger: 6,
+    connections: ["sunken-road", "glass-ruins"],
+  },
+]
 
 const eventTemplates: EventTemplate[] = [
   {
@@ -71,7 +175,7 @@ const eventTemplates: EventTemplate[] = [
 
 export async function getOrCreateWorld() {
   const existing = await prisma.world.findFirst({ orderBy: { createdAt: "asc" } })
-  if (existing) return existing
+  if (existing) return ensureWorldMap(existing)
 
   const world = await prisma.world.create({
     data: {
@@ -80,8 +184,9 @@ export async function getOrCreateWorld() {
       description: "一个由 AI 怪物伙伴守护、探索和建设的小世界。",
     },
   })
-  await createWorldEvent(world)
-  return world
+  const seeded = await ensureWorldMap(world)
+  await createWorldEvent(seeded)
+  return seeded
 }
 
 export async function assignTeamCard(worldId: string, role: TeamRole, cardId: string) {
@@ -117,6 +222,7 @@ export async function advanceWorldDay(worldId: string) {
     where: { id: worldId },
     data: {
       day: { increment: 1 },
+      actionPoints: maxActionPoints,
       resource: clampStat(world.resource + 2),
       prosperity: clampStat(world.prosperity + (world.chaos > 45 ? -1 : 1)),
       safety: clampStat(world.safety + (world.chaos > 50 ? -2 : 1)),
@@ -125,6 +231,55 @@ export async function advanceWorldDay(worldId: string) {
   })
 
   await createWorldEvent(updated)
+  return updated
+}
+
+export async function travelWorldLocation(worldId: string, locationId: string) {
+  const world = await prisma.world.findUnique({ where: { id: worldId } })
+  if (!world) throw new Error("小世界不存在")
+  if (world.currentLocationId === locationId) return world
+  if (world.actionPoints < 1) throw new Error("行动点不足")
+
+  const [current, destination] = await Promise.all([
+    world.currentLocationId ? prisma.worldLocation.findUnique({ where: { id: world.currentLocationId } }) : null,
+    prisma.worldLocation.findUnique({ where: { id: locationId } }),
+  ])
+  if (!destination || destination.worldId !== worldId) throw new Error("地点不存在")
+  if (!destination.unlocked) throw new Error("地点尚未解锁")
+  if (current && !getLocationConnections(current).includes(destination.slug)) throw new Error("无法直接前往该地点")
+
+  return prisma.world.update({
+    where: { id: worldId },
+    data: {
+      currentLocationId: destination.id,
+      actionPoints: { decrement: 1 },
+    },
+  })
+}
+
+export async function exploreWorldLocation(worldId: string, locationId: string) {
+  const world = await prisma.world.findUnique({ where: { id: worldId } })
+  if (!world) throw new Error("小世界不存在")
+  if (world.currentLocationId !== locationId) throw new Error("需要先移动到该地点")
+  if (world.actionPoints < 1) throw new Error("行动点不足")
+
+  const location = await prisma.worldLocation.findUnique({ where: { id: locationId } })
+  if (!location || location.worldId !== worldId) throw new Error("地点不存在")
+  if (!location.unlocked) throw new Error("地点尚未解锁")
+
+  const pending = await prisma.worldEvent.findFirst({ where: { worldId, status: "pending" } })
+  if (pending) throw new Error("还有未处理事件")
+
+  const updated = await prisma.world.update({
+    where: { id: worldId },
+    data: {
+      actionPoints: { decrement: 1 },
+      resource: clampStat(world.resource + getBiomeResource(location.biome)),
+      chaos: clampStat(world.chaos + Math.max(0, location.danger - 3)),
+    },
+  })
+  await unlockNearbyLocations(location)
+  await createWorldEvent(updated, location)
   return updated
 }
 
@@ -316,22 +471,99 @@ export async function getWorldTeamRows(worldId: string) {
     .filter((row): row is WorldCard & { card: Card } => Boolean(row))
 }
 
-function createWorldEvent(world: World) {
-  const template = eventTemplates[(world.day - 1) % eventTemplates.length]
-  const difficulty = Math.max(1, Math.min(10, Math.floor(world.day / 2) + 1 + Math.floor(world.chaos / 35)))
+function createWorldEvent(world: World, location?: WorldLocation | null) {
+  const template = getLocationEventTemplate(world, location)
+  const difficulty = Math.max(
+    1,
+    Math.min(10, Math.floor(world.day / 2) + 1 + Math.floor(world.chaos / 35) + (location ? Math.floor(location.danger / 2) : 0)),
+  )
 
   return prisma.worldEvent.create({
     data: {
       worldId: world.id,
+      locationId: location?.id,
       day: world.day,
       type: template.type,
-      title: template.title,
-      description: template.description,
+      title: location ? `${location.name} · ${template.title}` : template.title,
+      description: location ? `${location.description} ${template.description}` : template.description,
       difficulty,
       impactJson: JSON.stringify(template.impact),
       rewardJson: JSON.stringify(template.reward),
     },
   })
+}
+
+async function ensureWorldMap(world: World) {
+  const count = await prisma.worldLocation.count({ where: { worldId: world.id } })
+  if (count === 0) {
+    await prisma.worldLocation.createMany({
+      data: locationSeeds.map((location) => ({
+        worldId: world.id,
+        slug: location.slug,
+        name: location.name,
+        biome: location.biome,
+        description: location.description,
+        x: location.x,
+        y: location.y,
+        danger: location.danger,
+        unlocked: Boolean(location.unlocked),
+        discovered: Boolean(location.discovered),
+        connections: JSON.stringify(location.connections),
+      })),
+    })
+  }
+
+  const start = await prisma.worldLocation.findFirst({ where: { worldId: world.id, slug: "hearthfield" } })
+  if (!world.currentLocationId && start) {
+    return prisma.world.update({
+      where: { id: world.id },
+      data: {
+        currentLocationId: start.id,
+        actionPoints: world.actionPoints || maxActionPoints,
+      },
+    })
+  }
+
+  return world
+}
+
+async function unlockNearbyLocations(location: WorldLocation) {
+  const connections = getLocationConnections(location)
+  if (!connections.length) return
+
+  await prisma.worldLocation.updateMany({
+    where: {
+      worldId: location.worldId,
+      slug: { in: connections },
+    },
+    data: {
+      unlocked: true,
+    },
+  })
+}
+
+function getLocationConnections(location: Pick<WorldLocation, "connections">) {
+  try {
+    return JSON.parse(location.connections) as string[]
+  } catch {
+    return []
+  }
+}
+
+function getLocationEventTemplate(world: World, location?: WorldLocation | null) {
+  if (!location) return eventTemplates[(world.day - 1) % eventTemplates.length]
+  if (location.biome === "据点") return eventTemplates[2]
+  if (location.biome === "火山" || location.biome === "废墟") return eventTemplates[3]
+  if (location.biome === "森林" || location.biome === "湿地") return eventTemplates[1]
+  if (location.biome === "港口") return eventTemplates[2]
+  return eventTemplates[(world.day + location.danger) % eventTemplates.length]
+}
+
+function getBiomeResource(biome: string) {
+  if (biome === "森林" || biome === "湿地") return 2
+  if (biome === "港口" || biome === "遗迹") return 1
+  if (biome === "火山") return 3
+  return 0
 }
 
 function resolveCheckEvent(event: WorldEvent & { world: World }, approach: "caution" | "negotiate") {

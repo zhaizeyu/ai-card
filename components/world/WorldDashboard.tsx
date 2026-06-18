@@ -1,8 +1,8 @@
 "use client"
 
-import { Boxes, CalendarDays, CheckCircle2, Flame, HeartHandshake, Shield, Swords, Trophy, Users } from "lucide-react"
+import { Boxes, CalendarDays, CheckCircle2, Compass, Flame, Footprints, HeartHandshake, MapPin, Shield, Swords, Trophy, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useMemo, useState, type CSSProperties } from "react"
 import { Button } from "@/components/ui/button"
 import { Panel } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -31,6 +31,8 @@ type WorldState = {
   theme: string
   description: string | null
   day: number
+  actionPoints: number
+  currentLocationId: string | null
   prosperity: number
   safety: number
   resource: number
@@ -65,12 +67,27 @@ type InventoryItem = {
   equippedCardId: string | null
 }
 
+type LocationState = {
+  id: string
+  slug: string
+  name: string
+  biome: string
+  description: string
+  x: number
+  y: number
+  danger: number
+  unlocked: boolean
+  discovered: boolean
+  connections: string[]
+}
+
 type Props = {
   world: WorldState
   cards: CardSummary[]
   team: TeamAssignment[]
   pendingEvent: EventState | null
   recentEvents: EventState[]
+  locations: LocationState[]
   inventory: InventoryItem[]
 }
 
@@ -80,10 +97,11 @@ const roles = [
   { id: "team_3", label: "三号位" },
 ] as const
 
-export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents, inventory }: Props) {
+export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents, locations, inventory }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState("")
   const [error, setError] = useState("")
+  const [selectedLocationId, setSelectedLocationId] = useState(world.currentLocationId ?? locations.find((item) => item.unlocked)?.id ?? "")
   const [selectedComponent, setSelectedComponent] = useState(inventory.find((item) => !item.equippedCardId)?.id ?? "")
   const [selectedEquipCard, setSelectedEquipCard] = useState(cards.find((card) => card.upgradeUnlocked)?.id ?? "")
 
@@ -96,6 +114,20 @@ export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents,
   const bondBonus = team.length === 3 ? Math.min(18, Math.floor(averageBond / 10) * 2) : 0
   const finale = buildFinaleProgress(world, teamCards, averageBond)
   const tasks = buildTasks(world, teamCards, inventory, pendingEvent, averageBond)
+  const currentLocation = locations.find((location) => location.id === world.currentLocationId) ?? locations[0]
+  const selectedLocation = locations.find((location) => location.id === selectedLocationId) ?? currentLocation
+  const reachableSlugs = currentLocation?.connections ?? []
+  const canTravel =
+    Boolean(selectedLocation) &&
+    selectedLocation.id !== world.currentLocationId &&
+    selectedLocation.unlocked &&
+    reachableSlugs.includes(selectedLocation.slug)
+  const canExplore =
+    Boolean(selectedLocation) &&
+    selectedLocation.id === world.currentLocationId &&
+    selectedLocation.unlocked &&
+    !pendingEvent &&
+    world.actionPoints > 0
 
   async function postWorldAction(body: Record<string, unknown>, loadingLabel: string) {
     setLoading(loadingLabel)
@@ -127,6 +159,16 @@ export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents,
     if (data) router.refresh()
   }
 
+  async function travelLocation(locationId: string) {
+    const data = await postWorldAction({ action: "travel_location", worldId: world.id, locationId }, "travel")
+    if (data) router.refresh()
+  }
+
+  async function exploreLocation(locationId: string) {
+    const data = await postWorldAction({ action: "explore_location", worldId: world.id, locationId }, "explore")
+    if (data) router.refresh()
+  }
+
   async function trainBond() {
     const data = await postWorldAction({ action: "train_bond", worldId: world.id }, "train-bond")
     if (data) router.refresh()
@@ -153,13 +195,13 @@ export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents,
     <main className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-ink/50">第 {world.day} 天 · {world.theme}</p>
+          <p className="text-sm font-semibold text-ink/50">第 {world.day} 天 · 行动点 {world.actionPoints}/4 · {world.theme}</p>
           <h1 className="mt-2 text-4xl font-black">{world.name}</h1>
           <p className="mt-3 max-w-2xl leading-7 text-ink/70">{world.description}</p>
         </div>
         <Button onClick={advanceDay} disabled={Boolean(pendingEvent) || loading === "advance"} className="gap-2">
           <CalendarDays className="h-4 w-4" />
-          {loading === "advance" ? "推进中" : "推进一天"}
+          {loading === "advance" ? "休整中" : "休整到明天"}
         </Button>
       </div>
 
@@ -205,6 +247,93 @@ export function WorldDashboard({ world, cards, team, pendingEvent, recentEvents,
 
       <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
+          <Panel className="overflow-hidden p-0">
+            <div className="grid gap-0 lg:grid-cols-[1fr_310px]">
+              <div className="relative min-h-[430px] overflow-hidden border-b border-ink/10 bg-[linear-gradient(135deg,#e9f2ee_0%,#f7eddc_48%,#e6edf5_100%)] lg:border-b-0 lg:border-r">
+                <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(23,31,33,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(23,31,33,.12)_1px,transparent_1px)] [background-size:48px_48px]" />
+                {locations.flatMap((location) =>
+                  location.connections.map((slug) => {
+                    const target = locations.find((item) => item.slug === slug)
+                    if (!target || location.slug > target.slug) return null
+                    const visible = location.unlocked && target.unlocked
+                    return (
+                      <div
+                        key={`${location.slug}-${slug}`}
+                        className={cn("absolute h-px origin-left bg-ink/20", visible ? "opacity-70" : "opacity-15")}
+                        style={getPathStyle(location, target)}
+                      />
+                    )
+                  }),
+                )}
+                {locations.map((location) => {
+                  const active = location.id === world.currentLocationId
+                  const selected = location.id === selectedLocation?.id
+                  return (
+                    <button
+                      key={location.id}
+                      type="button"
+                      onClick={() => setSelectedLocationId(location.id)}
+                      className={cn(
+                        "absolute flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border text-xs font-black shadow-card transition",
+                        location.unlocked ? "border-white/80 bg-white text-ink hover:-translate-y-[55%]" : "border-ink/10 bg-ink/20 text-white",
+                        active && "bg-ember text-white",
+                        selected && "ring-2 ring-ink/40",
+                      )}
+                      style={{ left: `${location.x}%`, top: `${location.y}%` }}
+                      title={location.name}
+                    >
+                      {location.unlocked ? <MapPin className="h-5 w-5" /> : "?"}
+                    </button>
+                  )
+                })}
+                <div className="absolute left-4 top-4 rounded-md border border-white/70 bg-white/80 px-3 py-2 text-sm font-bold text-ink/65 backdrop-blur">
+                  开放地图 · {locations.filter((item) => item.unlocked).length}/{locations.length} 已解锁
+                </div>
+              </div>
+              <div className="bg-white p-5">
+                <p className="flex items-center gap-2 text-sm font-semibold text-ink/50">
+                  <Compass className="h-4 w-4" />
+                  当前地点
+                </p>
+                <h2 className="mt-2 text-2xl font-black">{selectedLocation?.name ?? "未知区域"}</h2>
+                <p className="mt-2 text-sm font-bold text-ink/50">
+                  {selectedLocation?.biome ?? "未知"} · 危险 {selectedLocation?.danger ?? "-"} · {selectedLocation?.unlocked ? "已解锁" : "未解锁"}
+                </p>
+                <p className="mt-4 leading-7 text-ink/70">
+                  {selectedLocation?.unlocked ? selectedLocation.description : "这片区域仍被战争迷雾覆盖，需要从相邻地点探索后解锁。"}
+                </p>
+                {currentLocation ? (
+                  <p className="mt-4 rounded-md border border-ink/10 bg-ink/[0.03] p-3 text-sm text-ink/65">
+                    队伍位置：<span className="font-bold text-ink">{currentLocation.name}</span>
+                  </p>
+                ) : null}
+                <div className="mt-5 grid gap-3">
+                  <Button
+                    onClick={() => selectedLocation && travelLocation(selectedLocation.id)}
+                    disabled={!canTravel || loading === "travel" || world.actionPoints < 1}
+                    className="gap-2"
+                  >
+                    <Footprints className="h-4 w-4" />
+                    {loading === "travel" ? "移动中" : "移动到这里 · 行动点 -1"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => selectedLocation && exploreLocation(selectedLocation.id)}
+                    disabled={!canExplore || loading === "explore"}
+                    className="gap-2"
+                  >
+                    <Compass className="h-4 w-4" />
+                    {loading === "explore" ? "探索中" : "探索当前位置 · 行动点 -1"}
+                  </Button>
+                </div>
+                <div className="mt-5 space-y-2 text-sm text-ink/60">
+                  <p>相邻地点：{currentLocation?.connections.length ? currentLocation.connections.map((slug) => locations.find((item) => item.slug === slug)?.name ?? slug).join(" / ") : "无"}</p>
+                  {pendingEvent ? <p className="font-semibold text-ember">先处理当前事件，才能继续探索。</p> : null}
+                </div>
+              </div>
+            </div>
+          </Panel>
+
           <Panel className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -409,6 +538,20 @@ function WorldStat({ label, value, tone }: { label: string; value: number; tone:
   )
 }
 
+function getPathStyle(from: LocationState, to: LocationState): CSSProperties {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.sqrt(dx * dx + dy * dy)
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI)
+
+  return {
+    left: `${from.x}%`,
+    top: `${from.y}%`,
+    width: `${length}%`,
+    transform: `rotate(${angle}deg)`,
+  }
+}
+
 function buildFinaleProgress(world: WorldState, teamCards: CardSummary[], averageBond: number) {
   const goals = [
     { label: "声望", value: `${Math.min(world.fame, 40)}/40`, done: world.fame >= 40, score: Math.min(world.fame / 40, 1) },
@@ -431,6 +574,7 @@ function buildTasks(
 ) {
   return [
     { label: "配置 3 张主力卡", done: teamCards.length === 3 },
+    { label: "在地图上探索当前位置", done: Boolean(pendingEvent) || world.actionPoints < 4 },
     { label: "处理今日事件", done: !pendingEvent },
     { label: "任意主力达到 Lv.5", done: teamCards.some((card) => card.level >= 5) },
     { label: "主力平均羁绊达到 20", done: averageBond >= 20 },

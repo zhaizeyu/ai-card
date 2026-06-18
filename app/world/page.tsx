@@ -6,7 +6,7 @@ export const revalidate = 10
 
 export default async function WorldPage() {
   const world = await getOrCreateWorld()
-  const [worldCards, cards, events, inventory] = await Promise.all([
+  const [worldCards, cards, events, inventory, locations] = await Promise.all([
     prisma.worldCard.findMany({
       where: { worldId: world.id, role: { in: [...teamRoles] } },
       include: { card: true },
@@ -14,6 +14,7 @@ export default async function WorldPage() {
     prisma.card.findMany({ orderBy: [{ level: "desc" }, { createdAt: "desc" }], take: 80 }),
     prisma.worldEvent.findMany({ where: { worldId: world.id }, orderBy: [{ day: "desc" }, { createdAt: "desc" }], take: 8 }),
     prisma.componentReward.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
+    prisma.worldLocation.findMany({ where: { worldId: world.id }, orderBy: [{ y: "asc" }, { x: "asc" }] }),
   ])
 
   const pendingEvent = events.find((event) => event.status === "pending") ?? null
@@ -26,6 +27,8 @@ export default async function WorldPage() {
         theme: world.theme,
         description: world.description,
         day: world.day,
+        actionPoints: world.actionPoints,
+        currentLocationId: world.currentLocationId,
         prosperity: world.prosperity,
         safety: world.safety,
         resource: world.resource,
@@ -40,6 +43,7 @@ export default async function WorldPage() {
       }))}
       pendingEvent={pendingEvent ? toEventState(pendingEvent) : null}
       recentEvents={events.map(toEventState)}
+      locations={locations.map(toLocationState)}
       inventory={inventory.map((item) => ({
         id: item.id,
         name: item.name,
@@ -51,6 +55,42 @@ export default async function WorldPage() {
       }))}
     />
   )
+}
+
+function toLocationState(location: {
+  id: string
+  slug: string
+  name: string
+  biome: string
+  description: string
+  x: number
+  y: number
+  danger: number
+  unlocked: boolean
+  discovered: boolean
+  connections: string
+}) {
+  return {
+    id: location.id,
+    slug: location.slug,
+    name: location.name,
+    biome: location.biome,
+    description: location.description,
+    x: location.x,
+    y: location.y,
+    danger: location.danger,
+    unlocked: location.unlocked,
+    discovered: location.discovered,
+    connections: parseConnections(location.connections),
+  }
+}
+
+function parseConnections(value: string) {
+  try {
+    return JSON.parse(value) as string[]
+  } catch {
+    return []
+  }
 }
 
 function toCardSummary(card: {
