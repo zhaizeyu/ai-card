@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { MonsterCard } from "@/components/cards/MonsterCard"
+import { DeleteCardButton } from "@/components/cards/DeleteCardButton"
 import { PrefetchLink } from "@/components/navigation/PrefetchLink"
 import { Button } from "@/components/ui/button"
 import { getComponentById } from "@/lib/card/components"
@@ -59,6 +60,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           <PrefetchLink className="inline-flex h-10 items-center rounded-md border border-ink/15 bg-white px-4 text-sm font-semibold" href="/create">
             再生成一张
           </PrefetchLink>
+          <DeleteCardButton cardId={card.id} cardName={card.name} redirectTo="/gallery" />
         </div>
       </section>
     </main>

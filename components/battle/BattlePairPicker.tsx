@@ -2,6 +2,7 @@
 
 import type { Card } from "@prisma/client"
 import { Check, Eye, Swords, X } from "lucide-react"
+import { DeleteCardButton } from "@/components/cards/DeleteCardButton"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { MonsterCard } from "@/components/cards/MonsterCard"
@@ -212,6 +213,7 @@ export function BattlePairPicker({ cards }: { cards: Card[] }) {
                 <Eye className="mr-2 h-4 w-4" />
                 详情
               </PrefetchLink>
+              <DeleteCardButton cardId={card.id} cardName={card.name} />
             </div>
           )
         })}
